@@ -21,46 +21,23 @@ The network is validated using a **Windows Server Bastion Host** in VPC-1 to tes
 
 ---
 
-## 🏛️ Network Architecture & Topology
+## 🏗️ Network Architecture & Topology
 
-```mermaid
-flowchart TB
-    subgraph Region["AWS Mumbai Region (ap-south-1)"]
-        subgraph VPC1["VPC-1 (28.0.0.0/16)"]
-            IGW["Internet Gateway<br><code>igw-0668b48161683c161</code>"]
-            
-            subgraph VPC1_Pub["VPC1-Public-Subnet (28.0.1.0/24)"]
-                Bastion["🖥️ <b>EC2-Public-VPC1</b><br>(Bastion Host)<br>Public IP: <code>52.66.49.9</code><br>Private IP: <code>28.0.1.254</code>"]
-            end
-            
-            subgraph VPC1_Priv["VPC1-Private-Subnet (28.0.2.0/24)"]
-                EC2_Priv1["🖥️ <b>EC2-Private-VPC1</b><br>Private IP: <code>28.0.2.38</code>"]
-            end
-        end
+<p align="center">
+  <img src="AWS_VPC_Peering_Architecture_Diagram.png" alt="AWS VPC Peering Architecture Diagram" width="950">
+</p>
 
-        subgraph PeeringTunnel["AWS Private Backbone Network"]
-            PCX{"🔗 <b>VPC Peering Connection</b><br><code>pcx-06adb74c0014abfff</code>"}
-        end
-
-        subgraph VPC2["VPC-2 (28.200.0.0/16) - Fully Isolated"]
-            subgraph VPC2_Priv["VPC2-Private-Subnet (28.200.0.0/16)"]
-                EC2_Priv2["🖥️ <b>EC2-Private-VPC2</b><br>(Target Host)<br>Private IP: <code>28.200.239.162</code>"]
-            end
-        end
-
-        IGW <==>|RDP Admin Access| Bastion
-        Bastion <-->|Local Intra-VPC| EC2_Priv1
-        Bastion <==>|Test-NetConnection Port 3389| PCX
-        PCX <==>|Encrypted Private Routing| EC2_Priv2
-    end
-
-    classDef vpc1 fill:#f0f7ff,stroke:#0066cc,stroke-width:2px;
-    classDef vpc2 fill:#fcf0f2,stroke:#cc0033,stroke-width:2px;
-    classDef peer fill:#f5f0ff,stroke:#6600cc,stroke-width:2px;
-    class VPC1 vpc1;
-    class VPC2 vpc2;
-    class PeeringTunnel peer;
-```
+### 📌 Architecture Breakdown
+* **Client [C] (Admin Laptop):** Connects to the public Bastion Host over Remote Desktop Protocol (RDP Port 3389) via the attached Internet Gateway (`igw-0668b48161683c161`).
+* **VPC-1 (`28.0.0.0/16`):**
+  * **Public Subnet (`28.0.1.0/24`):** Contains Bastion Host `EC2-Public-VPC1` (`52.66.49.9` / `28.0.1.254`).
+  * **Private Subnet (`28.0.2.0/24`):** Contains internal server `EC2-Private-VPC1` (`28.0.2.38`).
+  * **Route Tables:** Point internal subnet traffic locally and cross-VPC traffic to the peering connection.
+* **VPC-2 (`28.200.0.0/16` - Fully Isolated):**
+  * **Private Subnet (`28.200.0.0/16`):** Contains target server `EC2-Private-VPC2` (`28.200.239.162`). Has no internet gateway or public IPs attached.
+* **VPC Peering Connection (`pcx-06adb74c0014abfff`):**
+  * Bidirectional tunnel interconnecting both VPC CIDRs.
+  * Explicit route table entries in both VPCs ensure end-to-end symmetric routing.
 
 ---
 
@@ -90,16 +67,16 @@ flowchart TB
 
 ### 3. Route Table Configurations
 * **`VPC1-Public-RT`**:
-  * `0.0.0.0/0` $ightarrow$ `igw-0668b48161683c161` (Internet egress)
-  * `28.0.0.0/16` $ightarrow$ `local`
-  * `28.200.0.0/16` $ightarrow$ `pcx-06adb74c0014abfff` (Cross-VPC Peering)
+  * `0.0.0.0/0` → `igw-0668b48161683c161` (Internet egress)
+  * `28.0.0.0/16` → `local`
+  * `28.200.0.0/16` → `pcx-06adb74c0014abfff` (Cross-VPC Peering)
 * **`VPC2-Private-RT`**:
-  * `28.200.0.0/16` $ightarrow$ `local`
-  * `28.0.0.0/16` $ightarrow$ `pcx-06adb74c0014abfff` (Reverse Peering route)
+  * `28.200.0.0/16` → `local`
+  * `28.0.0.0/16` → `pcx-06adb74c0014abfff` (Reverse Peering route)
 
 ### 4. Firewall & Security Group Rules
 * Configured **`peering-sg-vpc1`** and **`peering-sg-vpc2`**:
-  * **Inbound:** Allow **RDP (TCP Port 3389)** and **ICMP (IPv4)** from anywhere (`0.0.0.0/0`) / VPC CIDRs for management and automated network probing.
+  * **Inbound:** Allow **RDP (TCP Port 3389)** and **ICMP (IPv4)** from anywhere (`0.0.0.0/0`) / VPC CIDRs for management and network probing.
   * **Outbound:** All traffic allowed (`0.0.0.0/0`).
 
 ---
